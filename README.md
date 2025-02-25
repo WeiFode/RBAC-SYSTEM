@@ -2,13 +2,13 @@
 
 ## 📦 项目预览图
 
-![RBAC Admin](./src/public/1.png)
-![RBAC Admin](./src/public/2.png)
-![RBAC Admin](./src/public/3.png)
-![RBAC Admin](./src/public/4.png)
-![RBAC Admin](./src/public/5.png)
-![RBAC Admin](./src/public/6.png)
-![RBAC Admin](./src/public/7.png)
+![RBAC Admin](/Frontend/src/public/1.png)
+![RBAC Admin](/Frontend/src/public/2.png)
+![RBAC Admin](/Frontend/src/public/3.png)
+![RBAC Admin](/Frontend/src/public/4.png)
+![RBAC Admin](/Frontend/src/public/5.png)
+![RBAC Admin](/Frontend/src/public/6.png)
+![RBAC Admin](/Frontend/src/public/7.png)
 
 ## 前端请进入Frontend
 
