@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { $serverReq } from '@/utils/serverRequest';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const data = await $serverReq.get('/api/dicts?type=ROLE_TYPE');
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type') || 'ROLE_TYPE';
+    const data = await $serverReq.get(`/dicts?type=${type}`);
     return NextResponse.json(data);
   }  catch (error: any) {
     return NextResponse.json(

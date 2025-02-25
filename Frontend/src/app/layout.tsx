@@ -6,11 +6,8 @@ import { LayoutProvider } from '@/contexts/layoutContext';
 import '@/styles/globals.css'
 import { SessionProvider } from "next-auth/react"
 import { ConfigProvider } from 'antd';
-import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
-import utc from 'dayjs/plugin/utc';
-import timezone from 'dayjs/plugin/timezone';
+import Metadata from "@/components/Metadata";
 
 export default function RootLayout({
   children,
@@ -20,6 +17,8 @@ export default function RootLayout({
 
   return (
     <html lang="en">
+      <Metadata seoTitle="大数据平台" seoDescription="后台系统" icon="/favicon.ico" />
+
       <body suppressHydrationWarning={true}>
         <ConfigProvider>
           <SessionProvider refetchInterval={10 * 60}>

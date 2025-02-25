@@ -11,6 +11,7 @@ import { DataNode } from 'antd/es/tree'
 import { useLayout } from '@/contexts/layoutContext';
 import { $clientReq } from '@/utils/clientRequest';
 import PermissionButton from '@/components/PermissionButton';
+import { Icon } from '@iconify/react'
 
 interface User {
   id: number;
@@ -34,7 +35,7 @@ const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   /** 查询条件-start */
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(6);
+  const [pageSize, setPageSize] = useState<number>(10);
   const [searchName, setSearchName] = useState<string>('');
   const [searchEmail, setSearchEmail] = useState<string>('');
   const [searchRoles, setSearchRoles] = useState<string[]>([]);
@@ -47,11 +48,17 @@ const UserManagement: React.FC = () => {
   }, [setUseDefaultLayout]);
 
   const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+    if (page !== currentPage) {
+      setCurrentPage(page);
+    }
   };
+
   const handlePageSizeChange = (size: number) => {
-    setPageSize(size);
-    setCurrentPage(1);
+    if (size !== pageSize) {
+      setPageSize(size);
+      setCurrentPage(1);
+      fetchUsers('', '', [], 1, size, departmentId);
+    }
   };
 
   /** 部门-start */
@@ -67,11 +74,10 @@ const UserManagement: React.FC = () => {
   const [treeData, setTreeData] = useState<any>([]);
   useEffect(() => {
     setTreeLoading(true)
-    fetch('/api/department/get')
+    fetch('/api/departments/get')
       .then(response => response.json())
       .then(data => {
-        console.log('data.departments', data.departments);
-        const departments = data.departments
+        const departments = data.data.list
         // 供给添加修改表单使用
         setDepartmentOption(departments.map((department: { name: string; id: number }) => ({
           label: department.name,
@@ -89,6 +95,9 @@ const UserManagement: React.FC = () => {
     if (info.selected) {
       const selectedNode = info.node as TreeNode;
       setDepartmentId(selectedNode.key)
+      setSearchName('')
+      setSearchEmail('')
+      setSearchRoles([])
       fetchUsers('', '', [], 1, pageSize, selectedNode.key)
     }
   };
@@ -100,7 +109,7 @@ const UserManagement: React.FC = () => {
     fetch('/api/dicts')
       .then(response => response.json())
       .then(data => {
-        setRolesOption(data)
+        setRolesOption(data.data.list)
       })
       .catch(error => {
         console.error('error:', error);
@@ -136,7 +145,7 @@ const UserManagement: React.FC = () => {
 
   // 删除
   const handleDelete = async (record: User) => {
-    const response = await fetch(`/api/adminUser/del?id=${record.id}`, { method: 'DELETE' });
+    const response = await fetch(`/api/users/del?id=${record.id}`, { method: 'DELETE' });
     const result = await response.json()
     if (!response.ok) {
       message.error(result.error)
@@ -157,27 +166,23 @@ const UserManagement: React.FC = () => {
     form.validateFields().then(async values => {
       setSaveLoading(true);
       try {
-        values.roles = values.roles.map((role: any) =>
-          typeof role === 'object' ? role : { id: Number(role) }
-        );
+        // 将roles转换为roles_ids
+        const role_ids = values.roles.map((role: any) => Number(role));
+        // 从values中删除roles
+        delete values.roles;
 
-        const url = editingUser ? '/api/adminUser/update' : '/api/adminUser/create';
-        const method = editingUser ? 'PUT' : 'POST';
+        const url = editingUser ? '/users/update' : '/users/create';
+        const method = editingUser ? 'put' : 'post';
 
-        const response = await fetch(url, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            ...values,
-            id: editingUser?.id,
-            status: values.status ? 1 : 0,
-          }),
-        });
-        const result = await response.json();
-        if (result.error) {
-          message.error(result.error)
+        const params = {
+          ...values,
+          id: editingUser?.id,
+          status: values.status ? 1 : 0,
+          role_ids, // 使用roles_ids替代roles
+        }
+
+        const result = await $clientReq[method](url, params);
+        if (!result.data) {
           return
         }
 
@@ -197,32 +202,33 @@ const UserManagement: React.FC = () => {
 
   const fetchUsers = useCallback(async (name = searchName, email = searchEmail, roles = searchRoles, page = currentPage, size = pageSize, deptId = departmentId) => {
     setLoading(true);
-    const url = `/adminUser/get?page=${page}&pageSize=${size}&name=${name}&email=${email}&roles=${roles}` + (deptId ? `&departmentID=${deptId}` : '');
+    const url = `/users/get?page=${page}&pageSize=${size}&name=${name}&email=${email}&roles=${roles}` + (deptId ? `&departmentID=${deptId}` : '');
     try {
       const data = await $clientReq.get(url);
       if (data) {
-        setUsers(data.users);
-        setTotalItems(data.total);
+        setUsers(data.data.list);
+        setTotalItems(data.data.total);
       }
     } catch (error) {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, departmentId]);
+  }, [searchName, searchEmail, searchRoles, currentPage, pageSize, departmentId]);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [currentPage]);
 
   const handleRefresh = () => {
+    // 保持当前的 pageSize
+    const currentSize = pageSize;
     setCurrentPage(1);
-    setPageSize(5);
     setDepartmentId(null);
     setSearchName('');
     setSearchEmail('');
     setSearchRoles([]);
     setTreeKey(prevKey => prevKey + 1);
-    fetchUsers('', '', [], 1, 5, null);
+    fetchUsers('', '', [], 1, currentSize, null);
     Notification({
       type: 'success',
       message: '刷新成功!',
@@ -445,16 +451,19 @@ const UserManagement: React.FC = () => {
               </Col>
               <Col span={6}>
                 <Form.Item label="">
-                  <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-                    搜索
-                  </Button>
+                  <Space size={16}>
+                    <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+                      搜索
+                    </Button>
+                    <Button icon={<ReloadOutlined />} onClick={handleRefresh}>刷新</Button>
+                  </Space>
                 </Form.Item>
               </Col>
             </Row>
           </Form>
 
           {/* 批量操作和列控制 */}
-          <Space style={{ marginBottom: '20px', marginTop: '20px' }}>
+          <Space style={{ marginBottom: '20px', marginTop: '10px' }} className="space-x-2">
             <PermissionButton permissionCode="system:user:add" type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
               添加用户
             </PermissionButton>
@@ -464,7 +473,6 @@ const UserManagement: React.FC = () => {
             <Dropdown overlay={columnMenu}>
               <Button icon={<SettingOutlined />}>自定义列</Button>
             </Dropdown>
-            <Button icon={<ReloadOutlined />} onClick={handleRefresh}>刷新</Button>
           </Space>
 
           {/* 用户表格 */}
@@ -477,17 +485,29 @@ const UserManagement: React.FC = () => {
             bordered
             loading={loading}
             locale={{
-              emptyText: <Empty description="暂无数据" />, // 空数据时展示
+              emptyText: (
+                <div className="py-8 flex flex-col items-center">
+                  <Icon
+                    icon="icon-park-twotone:every-user"
+                    className="text-4xl text-gray-300 mb-2"
+                  />
+                  <div className="text-gray-500">暂无用户数据</div>
+                </div>
+              )
             }}
             scroll={{ x: 1000 }} // 滚动以支持固定列
           />
-          <Pagination
-            currentPage={currentPage}
-            pageSize={pageSize}
-            totalItems={totalItems}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-          />
+          {
+            totalItems > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                pageSize={pageSize}
+                totalItems={totalItems}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            )
+          }
         </Col>
       </Row>
       {/* 抽屉表单 */}

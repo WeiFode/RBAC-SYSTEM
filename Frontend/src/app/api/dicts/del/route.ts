@@ -9,7 +9,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: '用户ID缺失' }, { status: 400 });
     }
 
-    const data = await $serverReq.delete(`/api/dicts/${userId}`);
+    const data = await $serverReq.delete(`/dicts/${userId}`);
 
     return NextResponse.json(data);
   }  catch (error: any) {

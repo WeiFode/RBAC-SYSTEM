@@ -1,18 +1,20 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, Popconfirm, message, Space, Drawer, Select, InputNumber, Tag, Badge, Tooltip, Row, Col } from 'antd';
+import { Table, Button, Modal, Form, Input, Popconfirm, message, Space, Drawer, Select, InputNumber, Tag, Badge, Tooltip, Row, Col, Empty } from 'antd';
 import Notification from '@/components/Notification'
 import Pagination from '@/components/Pagination'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useLayout } from '@/contexts/layoutContext';
 import { $clientReq } from '@/utils/clientRequest';
-
+import DateUtils from '@/utils/dateFormat';
 interface DictItem {
     id: number;
     type: string;
     label: string;
     value: string;
     sort: number;
+    items?: DictItem[];
+    count?: number;
     description: string;
     created_at: string;
     updated_at: string;
@@ -23,7 +25,7 @@ const DictManagement: React.FC = () => {
     const [dictItems, setDictItems] = useState<DictItem[]>([]);
     /** 查询条件-start */
     const [currentPage, setCurrentPage] = useState<number>(1);
-    const [pageSize, setPageSize] = useState<number>(10);
+    const [pageSize, setPageSize] = useState<number>(50);
     const [searchType, setSearchType] = useState('');
     const [searchLabel, setSearchLabel] = useState('');
     /** 查询条件-end */
@@ -33,12 +35,107 @@ const DictManagement: React.FC = () => {
     const [editingItem, setEditingItem] = useState<DictItem | null>(null);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [form] = Form.useForm();
-    /** 用于表格展开和折叠唯一 */
-    const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
-    const onExpand = (expanded: boolean, record: any) => {
-        setExpandedRowKeys(expanded ? [record.type] : []);
-    };
+    const [selectedType, setSelectedType] = useState<string>('');
 
+    // 修改表格列配置，简化左侧主字典表格
+    const mainColumns: any[] = [
+        {
+            title: '字典类型',
+            dataIndex: 'type',
+            key: 'type',
+            align: 'center',
+            render: (text: string) => (
+                <Space>
+                    <Tag color="blue">{text}</Tag>
+                    <Badge count={dictItems.find(item => item.type === text)?.count || 0} overflowCount={999} />
+                </Space>
+            )
+        }
+    ];
+
+    const detailColumns: any[] = [
+        {
+            title: '标签',
+            dataIndex: 'label',
+            key: 'label',
+            align: 'center',
+            render: (text: string) => <Tag color="green">{text}</Tag>
+        },
+        {
+            title: '值',
+            dataIndex: 'value',
+            key: 'value',
+            align: 'center',
+            render: (text: string) => <Tag color="blue">{text}</Tag>
+        },
+        {
+            title: '排序',
+            dataIndex: 'sort',
+            key: 'sort',
+            align: 'center',
+            width: 80,
+        },
+        {
+            title: '描述',
+            dataIndex: 'description',
+            key: 'description',
+            align: 'center',
+            ellipsis: true,
+            render: (text: string) => (
+                <Tooltip title={text}>
+                    <span>{text || '-'}</span>
+                </Tooltip>
+            )
+        },
+        {
+            title: '创建时间',
+            dataIndex: 'created_at',
+            key: 'created_at',
+            align: 'center',
+            width: 160,
+            render: (text: string) => DateUtils.toCustomFormatString(text)
+        },
+        {
+            title: '更新时间',
+            dataIndex: 'updated_at',
+            key: 'updated_at',
+            align: 'center',
+            width: 160,
+            render: (text: string) => DateUtils.toCustomFormatString(text)
+        },
+        {
+            title: '操作',
+            key: 'action',
+            align: 'center',
+            fixed: 'right',
+            width: 200,
+            render: (_: any, record: DictItem) => (
+                <Space>
+                    <Button
+                        type="text"
+                        icon={<EditOutlined />}
+                        onClick={() => handleEdit(record)}
+                    >
+                        编辑
+                    </Button>
+                    <Popconfirm
+                        title="确定要删除这条记录吗？"
+                        onConfirm={() => handleDelete(record.id)}
+                        okText="确定"
+                        cancelText="取消"
+                    >
+                        <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                        >
+                            删除
+                        </Button>
+                    </Popconfirm>
+                </Space>
+            ),
+        },
+    ];
 
     useEffect(() => {
         return () => setUseDefaultLayout(true);
@@ -152,190 +249,174 @@ const DictManagement: React.FC = () => {
         }
     };
 
-    const columns: any = [
-        {
-            title: '类型',
-            dataIndex: 'type',
-            key: 'type',
-            align: 'center',
-            render: (text: string) => <Tag color="blue">{text}</Tag>
-        },
-        {
-            title: '数量',
-            dataIndex: 'count',
-            key: 'count',
-            align: 'center',
-            render: (count: number) => <Badge count={count} overflowCount={999} />
-        },
-        {
-            title: '操作',
-            key: 'action',
-            align: 'center',
-            render: (_: any, record: any) => (
-                <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd(record.type)}>
-                    添加
-                </Button>
-            ),
-        },
-    ];
-
-    const expandedRowRender = (record: any) => {
-        const columns: any = [
-            {
-                title: '标签',
-                dataIndex: 'label',
-                key: 'label',
-                align: 'center',
-                render: (text: string) => <Tag color="green">{text}</Tag>
-            },
-            {
-                title: '值',
-                dataIndex: 'value',
-                key: 'value',
-                align: 'center',
-                render: (text: string) => <code>{text}</code>
-            },
-            {
-                title: '排序',
-                dataIndex: 'sort',
-                key: 'sort',
-                align: 'center',
-                sorter: (a: DictItem, b: DictItem) => a.sort - b.sort,
-            },
-            {
-                title: '描述',
-                dataIndex: 'description',
-                key: 'description',
-                align: 'center',
-                ellipsis: true,
-            },
-            {
-                title: '创建时间',
-                dataIndex: 'created_at',
-                key: 'created_at',
-                align: 'center',
-                render: (text: string) => {
-                    const date = new Date(text);
-                    return (
-                        <Tooltip title={date.toLocaleString('zh-CN', {
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit',
-                            hour12: false
-                        })}>
-                            {date.toLocaleDateString('zh-CN')}
-                        </Tooltip>
-                    );
-                }
-            },
-            {
-                title: '操作',
-                key: 'action',
-                align: 'center',
-                render: (_: any, item: DictItem) => (
-                    <Space size="middle">
-                        <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(item)}>
-                            编辑
-                        </Button>
-                        <Popconfirm
-                            title="确定要删除吗?"
-                            onConfirm={() => handleDelete(item.id)}
-                            okText="确定"
-                            cancelText="取消"
-                        >
-                            <Button type="link" danger icon={<DeleteOutlined />}>
-                                删除
-                            </Button>
-                        </Popconfirm>
-                    </Space>
-                ),
-            },
-        ];
-
-        return <Table columns={columns} rowKey={(item) => item.id} dataSource={record.items} pagination={false} />;
-    };
-
     return (
         <div className="p-4">
-            <Form>
-                <Row gutter={[24, 24]}>
-                    <Col span={6}>
-                        <Form.Item label="类型">
+            <Row gutter={[16, 16]} className="mb-6">
+                <Col span={24}>
+                    <div className="flex justify-between items-center">
+                        {/* <h2 className="text-xl font-bold m-0">数据字典管理</h2> */}
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={() => handleAdd()}
+                            size="large"
+                            className="hover:scale-105 transition-all"
+                        >
+                            添加字典项
+                        </Button>
+                    </div>
+                </Col>
+            </Row>
+
+            <Row gutter={[16, 16]}>
+                {/* 左侧主字典列表 */}
+                <Col span={6}>
+                    <div className="bg-white rounded-lg shadow-md transition-all hover:shadow-lg">
+                        <div className="p-4 border-b border-gray-100">
                             <Input
-                                placeholder="搜索类型"
+                                placeholder="搜索字典类型"
                                 value={searchType}
                                 onChange={(e) => setSearchType(e.target.value)}
-                                prefix={<SearchOutlined />}
+                                prefix={<SearchOutlined className="text-gray-400" />}
+                                className="hover:shadow transition-shadow"
+                                allowClear
                             />
-                        </Form.Item>
-                    </Col>
-                    <Col span={6}>
-                        <Form.Item label="标签">
-                            <Input
-                                placeholder="搜索标签"
-                                value={searchLabel}
-                                onChange={(e) => setSearchLabel(e.target.value)}
-                                prefix={<SearchOutlined />}
+                        </div>
+                        <div className="p-2">
+                            <Table
+                                columns={mainColumns}
+                                dataSource={dictItems}
+                                rowKey="type"
+                                pagination={false}
+                                loading={loading}
+                                onRow={(record) => ({
+                                    onClick: () => setSelectedType(record.type),
+                                    className: `cursor-pointer transition-colors duration-200 hover:bg-blue-50 
+                                    ${selectedType === record.type ? 'bg-blue-100' : ''}`
+                                })}
+                                size="middle"
+                                className="dict-type-table"
                             />
-                        </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                        <Form.Item label="">
-                            <div className='space-x-4'>
-                                <Button type="primary" icon={<SearchOutlined />} onClick={() => fetchDictItems()}>
-                                    搜索
-                                </Button>
-                                <Button icon={<ReloadOutlined />} onClick={handleReset}>
-                                    重置
-                                </Button>
-                                <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
-                                    添加字典项
-                                </Button>
+                        </div>
+                    </div>
+                </Col>
+
+                {/* 右侧字典项列表 */}
+                <Col span={18}>
+                    <div className="bg-white rounded-lg shadow-md transition-all hover:shadow-lg">
+                        <div className="p-4 border-b border-gray-100">
+                            <Row justify="space-between" align="middle">
+                                <Col>
+                                    <Space size="large">
+                                        <span className="text-gray-500">当前字典：</span>
+                                        {selectedType ? (
+                                            <Tag color="blue" className="px-4 py-1 text-base">
+                                                {selectedType}
+                                            </Tag>
+                                        ) : (
+                                            <span className="text-gray-400 italic">请选择字典类型</span>
+                                        )}
+                                    </Space>
+                                </Col>
+                                <Col>
+                                    <Space size="middle" className="flex-wrap">
+                                        <Input
+                                            placeholder="搜索标签"
+                                            value={searchLabel}
+                                            onChange={(e) => setSearchLabel(e.target.value)}
+                                            prefix={<SearchOutlined className="text-gray-400" />}
+                                            className="w-48 hover:shadow transition-shadow"
+                                            allowClear
+                                        />
+                                        <Space>
+                                            <Button
+                                                type="primary"
+                                                icon={<SearchOutlined />}
+                                                onClick={() => fetchDictItems()}
+                                                className="hover:scale-105 transition-all"
+                                            >
+                                                搜索
+                                            </Button>
+                                            <Button
+                                                icon={<ReloadOutlined />}
+                                                onClick={handleReset}
+                                                className="hover:scale-105 transition-all"
+                                            >
+                                                重置
+                                            </Button>
+                                            {selectedType && (
+                                                <Button
+                                                    type="primary"
+                                                    icon={<PlusOutlined />}
+                                                    onClick={() => handleAdd(selectedType)}
+                                                    className="hover:scale-105 transition-all"
+                                                >
+                                                    添加项
+                                                </Button>
+                                            )}
+                                        </Space>
+                                    </Space>
+                                </Col>
+                            </Row>
+                        </div>
+                        <div className="p-4">
+                            <Table
+                                columns={detailColumns}
+                                dataSource={dictItems.find(item => item.type === selectedType)?.items || []}
+                                rowKey="id"
+                                pagination={false}
+                                loading={loading}
+                                className="dict-items-table"
+                                size="middle"
+                                locale={{
+                                    emptyText: <Empty description="暂无数据" />, // 空数据时展示
+                                }}
+                                scroll={{ x: 1000 }} // 滚动以支持固定列
+                            />
+                            <div className="mt-4">
+                                <Pagination
+                                    currentPage={currentPage}
+                                    pageSize={pageSize}
+                                    totalItems={totalItems}
+                                    onPageChange={handlePageChange}
+                                    onPageSizeChange={handlePageSizeChange}
+                                />
                             </div>
-                        </Form.Item>
-                    </Col>
-                </Row>
-            </Form>
-            <Table
-                columns={columns}
-                expandable={{
-                    expandedRowRender,
-                    expandedRowKeys,
-                    onExpand,
-                }}
-                dataSource={dictItems}
-                rowKey={(record) => record.type}
-                loading={loading}
-                pagination={false}
-            />
-            <Pagination
-                currentPage={currentPage}
-                pageSize={pageSize}
-                totalItems={totalItems}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
-            />
+                        </div>
+                    </div>
+                </Col>
+            </Row>
             <Drawer
-                title={editingItem ? '编辑字典项' : '添加字典项'}
+                title={
+                    <div className="text-lg">
+                        {editingItem ? '编辑字典项' : '添加字典项'}
+                    </div>
+                }
                 placement="right"
                 onClose={() => setIsDrawerOpen(false)}
                 open={isDrawerOpen}
-                width={400}
+                width={480}
+                className="dict-drawer"
                 footer={
-                    <div style={{ textAlign: 'right' }}>
-                        <Button onClick={() => setIsDrawerOpen(false)} style={{ marginRight: 8 }}>
+                    <div className="flex justify-end space-x-2">
+                        <Button
+                            onClick={() => setIsDrawerOpen(false)}
+                            className="hover:scale-105 transition-all"
+                        >
                             取消
                         </Button>
-                        <Button onClick={handleSave} type="primary" loading={saveLoading}>
+                        <Button
+                            onClick={handleSave}
+                            type="primary"
+                            loading={saveLoading}
+                            className="hover:scale-105 transition-all"
+                        >
                             保存
                         </Button>
                     </div>
                 }
             >
-                <Form form={form} layout="vertical">
+                <Form form={form} layout="vertical" className="px-4">
                     <Form.Item name="type" label="类型" rules={[{ required: true, message: '请输入类型' }]}>
                         <Input disabled={!isEditing && !!form.getFieldValue('type')} />
                     </Form.Item>
@@ -346,10 +427,10 @@ const DictManagement: React.FC = () => {
                         <Input />
                     </Form.Item>
                     <Form.Item name="sort" label="排序" rules={[{ required: true, message: '请输入排序' }]}>
-                        <InputNumber min={0} style={{ width: '100%' }} />
+                        <InputNumber min={0} className="w-full" />
                     </Form.Item>
                     <Form.Item name="description" label="描述">
-                        <Input.TextArea />
+                        <Input.TextArea rows={4} />
                     </Form.Item>
                 </Form>
             </Drawer>

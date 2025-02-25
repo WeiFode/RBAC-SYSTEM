@@ -15,18 +15,16 @@ import {
     Dropdown,
     Menu,
     Tag,
-    Tooltip,
     Switch,
     InputNumber,
     Drawer,
-    Select
+    Tooltip
 } from 'antd';
 import {
     PlusOutlined,
     EditOutlined,
     DeleteOutlined,
     SettingOutlined,
-    MinusCircleOutlined,
     SlidersOutlined
 } from '@ant-design/icons';
 import { useLayout } from '@/contexts/layoutContext';
@@ -54,7 +52,7 @@ interface MenuItem {
 const MenuManagement: React.FC = () => {
     const { setUseDefaultLayout } = useLayout();
     const [currentPage, setCurrentPage] = useState<number>(1);
-    const [pageSize, setPageSize] = useState<number>(10);
+    const [pageSize, setPageSize] = useState<number>(99);
     const [totalItems, setTotalItems] = useState(0);
     const [loading, setLoading] = useState(false);
     const [menus, setMenus] = useState<MenuItem[]>([]);
@@ -62,16 +60,6 @@ const MenuManagement: React.FC = () => {
 
     // 关联角色，菜单所有关联角色
     const [visibleRoles, setVisibleRoles] = useState<{ id: number; name: string }[]>([]);
-    const [isRoleModalVisible, setIsRoleModalVisible] = useState(false);
-    // 打开关联角色弹窗
-    const showRoleModal = (roles: { id: number; name: string }[]) => {
-        setVisibleRoles(roles);
-        setIsRoleModalVisible(true);
-    };
-    // 关闭关联角色弹窗
-    const handleRoleModalClose = () => {
-        setIsRoleModalVisible(false);
-    };
 
     const handlePageChange = (page: number) => {
         setCurrentPage(page);
@@ -85,28 +73,17 @@ const MenuManagement: React.FC = () => {
     const fetchMenus = async () => {
         setLoading(true);
         try {
-            const url = `/menu/get?page=${currentPage}&pageSize=${pageSize}`;
+            const url = `/menus/get?page=${currentPage}&pageSize=${pageSize}`;
             const data = await $clientReq.get(url);
-            const treeData = buildMenuTree(data.menus);
+            const treeData = buildMenuTree(data.data.list);
             setMenus(treeData);
-            setTotalItems(data.total);
+            setTotalItems(data.data.total);
         } catch (error) {
         } finally {
             setLoading(false);
         }
     }
 
-    const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
-
-    const onExpand = (expanded: boolean, record: MenuItem) => {
-      if (expanded) {
-        // 如果是展开操作，只保留当前展开的行
-        setExpandedRowKeys([record.id]);
-      } else {
-        // 如果是折叠操作，清空展开的行
-        setExpandedRowKeys([]);
-      }
-    };
     const buildMenuTree = (menuList: MenuItem[]): MenuItem[] => {
         const menuMap = new Map<number, MenuItem>();
         const rootMenus: MenuItem[] = [];
@@ -132,6 +109,56 @@ const MenuManagement: React.FC = () => {
     useEffect(() => {
         fetchMenus();
     }, [currentPage, pageSize]);
+
+
+    const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+    const onExpand = (expanded: boolean, record: MenuItem) => {
+        if (expanded) {
+            // 展开当前行
+            setExpandedRowKeys(prev => {
+                const newKeys = new Set([...prev, record.id]);
+                return Array.from(newKeys);
+            });
+        } else {
+            // 收起当前行，包括第一个主菜单
+            setExpandedRowKeys(prev =>
+                prev.filter(key => key !== record.id)
+            );
+        }
+    };
+
+    useEffect(() => {
+        if (isInitialLoad && menus.length > 0) {
+            const firstMainMenuId = menus[0]?.id;
+            if (firstMainMenuId) {
+                setExpandedRowKeys([firstMainMenuId]);
+            }
+            setIsInitialLoad(false);
+        }
+    }, [menus, isInitialLoad]);
+
+    const handleExpandAll = () => {
+        const allIds = getAllMenuIds(menus);
+        setExpandedRowKeys(allIds);
+    };
+
+    const handleCollapseAll = () => {
+        setExpandedRowKeys([]); // 允许完全收起
+    };
+
+    // 辅助函数：获取所有菜单ID
+    const getAllMenuIds = (menuList: MenuItem[]): number[] => {
+        let ids: number[] = [];
+        menuList.forEach(menu => {
+            ids.push(menu.id);
+            if (menu.children?.length) {
+                ids = [...ids, ...getAllMenuIds(menu.children)];
+            }
+        });
+        return ids;
+    };
 
     const [editingMenu, setEditingMenu] = useState<MenuItem | null>(null);
     // 用于显示和隐藏自定义列
@@ -167,12 +194,9 @@ const MenuManagement: React.FC = () => {
 
     // 删除菜单
     const handleDelete = async (id: number) => {
-        const response = await fetch(`/api/menu/del?id=${id}`, {
-            method: 'DELETE',
-        });
-        const result = await response.json()
-        if (!response.ok) {
-            message.error(result.error)
+        const result = await $clientReq.delete(`/menus/del?id=${id}`);
+        if (result && !result?.message) {
+            return
         } else {
             Notification({
                 type: 'success',
@@ -180,8 +204,8 @@ const MenuManagement: React.FC = () => {
                 description: '菜单已删除',
                 placement: 'topRight'
             });
+            fetchMenus();
         }
-        fetchMenus();
     };
 
     /** 权限配置-start */
@@ -204,26 +228,15 @@ const MenuManagement: React.FC = () => {
                 ...values,
             };
 
-            const url = editingMenu ? '/api/menu/update' : '/api/menu/create';
-            const method = editingMenu ? 'PUT' : 'POST';
+            const url = editingMenu ? '/menus/update' : '/menus/create';
+            const method = editingMenu ? 'put' : 'post';
 
-            const response = await fetch(url, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(newMenu),
-            });
-
-            const result = await response.json();
-            if (!response.ok) {
-                message.error(result.error || '操作失败');
+            const result = await $clientReq[method](url, newMenu);
+            if (!result.data) {
+                message.error(result || '操作失败');
                 return;
             }
 
-
-            await fetchMenus();
-            setDrawerVisible(false);
             message.success(editingMenu ? '菜单已更新' : '新菜单已添加');
         } catch (error) {
             if (error instanceof Error) {
@@ -233,6 +246,8 @@ const MenuManagement: React.FC = () => {
             }
         } finally {
             setSaveLoading(false);
+            setDrawerVisible(false);
+            fetchMenus();
         }
     };
 
@@ -265,11 +280,18 @@ const MenuManagement: React.FC = () => {
             dataIndex: 'title',
             key: 'title',
             align: 'left',
+            width: 250,
             render: (text: string, record: MenuItem) => (
-                <Space>
-                    {record.icon && <Icon icon={record.icon} className="text-lg" />}
-                    <span>{text}</span>
-                </Space>
+                <div className="flex items-center space-x-2">
+                    {record.icon ? (
+                        <Icon icon={record.icon} className="text-lg text-blue-500" />
+                    ) : (
+                        <div className="w-4 h-4" /> // 占位
+                    )}
+                    <span className="font-medium text-gray-700 dark:text-gray-200">
+                        {text}
+                    </span>
+                </div>
             )
         },
         {
@@ -277,21 +299,42 @@ const MenuManagement: React.FC = () => {
             dataIndex: 'path',
             key: 'path',
             align: 'center',
+            width: 200,
             visible: visibleColumns.path,
+            render: (path: string) => (
+                <Tooltip title={path}>
+                    <span className="text-gray-600 dark:text-gray-300 truncate block max-w-[180px]">
+                        {path || '-'}
+                    </span>
+                </Tooltip>
+            )
         },
         {
             title: '组件路径',
             dataIndex: 'component_path',
             key: 'component_path',
             align: 'center',
+            width: 300,
             visible: visibleColumns.component_path,
+            render: (path: string) => (
+                <Tooltip title={path}>
+                    <span className="text-gray-500 dark:text-gray-400 truncate block">
+                        {path || '-'}
+                    </span>
+                </Tooltip>
+            )
         },
         {
             title: '排序',
             dataIndex: 'sort',
             key: 'sort',
             align: 'center',
-            width: 80,
+            width: 100,
+            render: (sort: number) => (
+                <Tag className="min-w-[40px] text-center">
+                    {sort}
+                </Tag>
+            )
         },
         {
             title: '状态',
@@ -299,28 +342,77 @@ const MenuManagement: React.FC = () => {
             key: 'status',
             align: 'center',
             width: 100,
-            render: (text: number) => (
-                <Tag color={text === 1 ? 'green' : 'red'}>
-                    {text === 1 ? '启用' : '禁用'}
-                </Tag>
-            ),
             visible: visibleColumns.status,
+            render: (status: number) => (
+                <Tag
+                    className={`px-3 py-1 rounded-full border-none
+                        ${status === 1
+                            ? 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400'
+                            : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'
+                        }`}
+                >
+                    <div className="flex items-center space-x-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${status === 1 ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <span>{status === 1 ? '启用' : '禁用'}</span>
+                    </div>
+                </Tag>
+            )
         },
         {
             title: '操作',
             key: 'action',
             align: 'center',
-            width: 200,
-            render: (text: any, record: MenuItem) => (
-                <Space size="middle">
-                    <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
-                    <Button type="link" icon={<SlidersOutlined />} onClick={() => handleConfigPermissions(record.id)}>配置权限</Button>
-                    <Popconfirm title="确定要删除吗?" okText="确定" cancelText="取消" onConfirm={() => handleDelete(record.id)}>
-                        <Button type="link" danger icon={<DeleteOutlined />}>删除</Button>
+            width: 250,
+            fixed: 'right',
+            render: (_: any, record: MenuItem) => (
+                <Space size={4} className="flex justify-center">
+                    <Tooltip title="编辑菜单">
+                        <Button
+                            type="link"
+                            icon={<EditOutlined />}
+                            onClick={() => handleEdit(record)}
+                            className="text-blue-500 hover:text-blue-600 transition-colors"
+                        >
+                            编辑
+                        </Button>
+                    </Tooltip>
+
+                    <Tooltip title="配置权限">
+                        <Button
+                            type="link"
+                            icon={<SlidersOutlined />}
+                            onClick={() => handleConfigPermissions(record.id)}
+                            className="text-green-500 hover:text-green-600 transition-colors"
+                        >
+                            配置权限
+                        </Button>
+                    </Tooltip>
+
+                    <Popconfirm
+                        title="删除确认"
+                        description="确定要删除这个菜单吗？此操作不可恢复。"
+                        onConfirm={() => handleDelete(record.id)}
+                        okText="确定"
+                        cancelText="取消"
+                        okButtonProps={{
+                            danger: true,
+                            className: 'hover:bg-red-600'
+                        }}
+                    >
+                        <Tooltip title="删除菜单">
+                            <Button
+                                type="link"
+                                danger
+                                icon={<DeleteOutlined />}
+                                className="hover:text-red-600 transition-colors"
+                            >
+                                删除
+                            </Button>
+                        </Tooltip>
                     </Popconfirm>
                 </Space>
-            ),
-        },
+            )
+        }
     ].filter(column => column.visible !== false);
 
     // 自定义列
@@ -341,13 +433,25 @@ const MenuManagement: React.FC = () => {
 
     return (
         <div className="p-4">
-            <Space>
+            <Space size={16}>
                 <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
                     添加菜单
                 </Button>
                 <Dropdown overlay={columnMenu}>
                     <Button icon={<SettingOutlined />}>自定义列</Button>
                 </Dropdown>
+                <Button
+                    icon={<SettingOutlined />}
+                    onClick={() => handleExpandAll()}
+                >
+                    展开所有
+                </Button>
+                <Button
+                    icon={<SettingOutlined />}
+                    onClick={() => handleCollapseAll()}
+                >
+                    收起所有
+                </Button>
             </Space>
 
             <Table
@@ -361,31 +465,36 @@ const MenuManagement: React.FC = () => {
                 expandable={{
                     expandedRowKeys,
                     onExpand,
-                    defaultExpandAllRows: true,
                     indentSize: 20,
                 }}
+                className="mt-4 shadow-sm rounded-lg overflow-hidden"
+                rowClassName={(record) => `
+                    hover:bg-blue-50 transition-colors duration-200
+                    dark:hover:bg-gray-700
+                `}
+                locale={{
+                    emptyText: (
+                        <div className="py-8 flex flex-col items-center">
+                            <Icon
+                                icon="dashicons:welcome-widgets-menus"
+                                className="text-4xl text-gray-300 mb-2"
+                            />
+                            <div className="text-gray-500">暂无菜单数据</div>
+                        </div>
+                    )
+                }}
             />
-            <Pagination
-                currentPage={currentPage}
-                pageSize={pageSize}
-                totalItems={totalItems}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
-            />
-
-            <Modal
-                title="关联角色"
-                open={isRoleModalVisible}
-                onCancel={handleRoleModalClose}
-                footer={null}
-            >
-                {visibleRoles.map(role => (
-                    <Tag color="blue" key={role.id} style={{ margin: '5px' }}>
-                        {role.name}
-                    </Tag>
-                ))}
-            </Modal>
-
+            {
+                totalItems > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        pageSize={pageSize}
+                        totalItems={totalItems}
+                        onPageChange={handlePageChange}
+                        onPageSizeChange={handlePageSizeChange}
+                    />
+                )
+            }
             <Drawer
                 title={editingMenu ? '编辑菜单' : '添加菜单'}
                 placement="right"

@@ -10,5 +10,5 @@ export interface MenuItem {
     updated_at?: string | null;
     children?: MenuItem[];
     status?: number | null;
-    permissions?: string | null;
+    permission_items?: string[] | null;
 }

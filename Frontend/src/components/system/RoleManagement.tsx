@@ -1,8 +1,8 @@
 'use client'
 import React, { useCallback, useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, Popconfirm, message, Drawer, Tree } from 'antd';
+import { Table, Button, Modal, Form, Input, Popconfirm, message, Drawer, Tree, Space, Tooltip } from 'antd';
 import Pagination from '../Pagination';
-import { EditOutlined, SettingOutlined, DeleteOutlined } from '@ant-design/icons';
+import { EditOutlined, SettingOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import Notification from '@/components/Notification'
 import { useLayout } from '@/contexts/layoutContext';
 import { $clientReq } from '@/utils/clientRequest';
@@ -37,9 +37,11 @@ const RoleManagement: React.FC = () => {
   }, [setUseDefaultLayout]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(5);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [searchName, setSearchName] = useState<string>('');
   const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [fetchAssignedMenusLoading, setFetchAssignedMenusLoading] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [form] = Form.useForm();
@@ -83,29 +85,34 @@ const RoleManagement: React.FC = () => {
 
   const fetchMenus = useCallback(async () => {
     try {
-      const menuRes = await $clientReq.get('/role/getMenus?page=1&pageSize=999');
-      setMenus(menuRes.menus);
-      setMenuTree(convertToTreeData(menuRes.menus, []));
+      const menuRes = await $clientReq.get('/roles/getMenus?page=1&pageSize=999');
+      setMenus(menuRes.data.list);
+      setMenuTree(convertToTreeData(menuRes.data.list, []));
     } catch (error) {
       message.error('获取菜单列表失败');
     }
   }, [convertToTreeData]);
 
+  // 获取已分配菜单
   const fetchAssignedMenus = useCallback(async (roleId: number) => {
-    const menuIds = await $clientReq.get(`/role/getAssignedMenus?id=${roleId}`);
-    setAssignedMenuIds(menuIds.menu_ids);
+    setFetchAssignedMenusLoading(true);
+    const menuIds = await $clientReq.get(`/roles/getAssignedMenus?id=${roleId}`);
+    setAssignedMenuIds(menuIds.data);
+    setFetchAssignedMenusLoading(false);
   }, []);
 
+  // 打开分配菜单抽屉
   const handleAssignMenus = useCallback((record: Role) => {
     setCurrentRole(record);
     fetchAssignedMenus(record.id);
     setIsMenuDrawerOpen(true);
   }, [fetchAssignedMenus]);
 
+  // 菜单树节点选中状态改变
   const handleMenuChange = useCallback((checkedKeys: React.Key[] | { checked: React.Key[]; halfChecked: React.Key[] }, info: any) => {
     const { node, checked } = info;
     let newCheckedKeys: React.Key[] = Array.isArray(checkedKeys) ? checkedKeys : checkedKeys.checked;
-  
+
     if (node.children) {
       const updateChildrenKeys = (parentKey: React.Key, shouldCheck: boolean) => {
         const updateKeys = (items: DataNode[]) => {
@@ -120,23 +127,24 @@ const RoleManagement: React.FC = () => {
             }
           });
         };
-  
+
         const parent = menuTree.find(item => item.key === parentKey);
         if (parent && parent.children) {
           updateKeys(parent.children);
         }
       };
-  
+
       updateChildrenKeys(node.key, checked);
     }
-  
+
     setAssignedMenuIds(Array.from(new Set(newCheckedKeys)).map(key => Number(key)));
   }, [menuTree]);
 
+  // 保存分配菜单
   const handleSaveAssignedMenus = async () => {
     if (!currentRole) return;
     try {
-      await $clientReq.post('/role/assignMenus', {
+      await $clientReq.post('/roles/assignMenus', {
         role_id: currentRole.id,
         menu_ids: assignedMenuIds,
       });
@@ -160,27 +168,50 @@ const RoleManagement: React.FC = () => {
   /** 菜单树模块-end */
 
   const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-  const handlePageSizeChange = (size: number) => {
-    setPageSize(size);
-    setCurrentPage(1);
+    if (page !== currentPage) {
+      setCurrentPage(page);
+      fetchRoles(page, pageSize);
+    }
   };
 
-  const fetchRoles = useCallback(async () => {
+  const handlePageSizeChange = (size: number) => {
+    if (size !== pageSize) {
+      setPageSize(size);
+      setCurrentPage(1);
+      fetchRoles(1, size);
+    }
+  };
+
+  // 获取角色列表
+  const fetchRoles = useCallback(async (page = currentPage, size = pageSize, name = searchName) => {
     setLoading(true);
-    const url = `/role/get?page=${currentPage}&pageSize=${pageSize}`;
-    const data = await $clientReq.get(url);
-    if (data) {
-      setRoles(data.roles);
-      setTotalItems(data.total);
+    const url = `/roles/get?page=${page}&pageSize=${size}&name=${name}`;
+    try {
+      const data = await $clientReq.get(url);
+      if (data) {
+        setRoles(data.data.list);
+        setTotalItems(data.data.total);
+      }
+    } catch (error) {
+    } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize])
+  }, [currentPage, pageSize, searchName])
 
   useEffect(() => {
     fetchRoles();
-  }, [fetchRoles]);
+  }, []);
+
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchRoles(1, pageSize, searchName);
+  }
+
+  const handleRefresh = () => {
+    setCurrentPage(1);
+    setSearchName('');
+    fetchRoles(1, pageSize, '');
+  }
 
   const handleAdd = () => {
     setEditingRole(null);
@@ -202,23 +233,19 @@ const RoleManagement: React.FC = () => {
     form.validateFields().then(async values => {
       setSaveLoading(true);
       try {
-        const url = editingRole ? '/api/role/update' : '/api/role/create';
-        const method = editingRole ? 'PUT' : 'POST';
+        const url = editingRole ? '/roles/update' : '/roles/create';
+        const method = editingRole ? 'put' : 'post';
 
-        const response = await fetch(url, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            ...values,
-            id: editingRole?.id
-          }),
-        });
+        const params = {
+          ...values,
+          id: editingRole?.id
+        }
 
-        const result = await response.json();
-        if (result.error) {
-          message.error(result.error);
+        const result = await $clientReq[method](url, params);
+        console.log('result:', result);
+
+        if (!result.data) {
+          message.error(result);
           return;
         }
         Notification({
@@ -235,14 +262,11 @@ const RoleManagement: React.FC = () => {
     });
   };
 
-
   const handleDelete = async (id: number) => {
-    const response = await fetch(`/api/role/del?id=${id}`, {
-      method: 'DELETE',
-    });
-    const result = await response.json()
-    if (!response.ok) {
-      message.error(result.error)
+    const result = await $clientReq.delete(`/roles/del?id=${id}`);
+
+    if (!result.data) {
+      message.error(result)
     } else {
       Notification({
         type: 'success',
@@ -259,54 +283,137 @@ const RoleManagement: React.FC = () => {
       title: '角色名称',
       dataIndex: 'name',
       key: 'name',
-      align: 'center'
+      align: 'center',
+      render: (text: string) => (
+        <span className="font-bold text-blue-600 hover:to-blue-800 cursor-pointer">
+          {text}
+        </span>
+      )
     },
     {
       title: '角色描述',
       dataIndex: 'description',
       key: 'description',
-      align: 'center'
+      align: 'center',
+      render: (text: string) => (
+        <span className="text-gray-600 dark:text-gray-300">
+          {text || '-'}
+        </span>
+      )
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      align: 'center',
+      render: (text: string) => (
+        <span className="text-sm text-gray-500 dark:text-gray-400">
+          {text ? new Date(text).toLocaleString() : '-'}
+        </span>
+      )
     },
     {
       title: '操作',
       key: 'action',
       align: 'center',
+      width: 280,
       render: (text: any, record: Role) => (
-        <>
-          <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>编辑</Button>
-          <Button type="link" icon={<SettingOutlined />} onClick={() => handleAssignMenus(record)}>分配菜单</Button>
+        <Space size="middle" className="flex justify-center">
+          <Tooltip title="编辑角色">
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              className="text-blue-500 hover:text-blue-600 transition-colors"
+            >
+              编辑
+            </Button>
+          </Tooltip>
+
+          <Tooltip title="分配菜单权限">
+            <Button
+              type="link"
+              icon={<SettingOutlined />}
+              onClick={() => handleAssignMenus(record)}
+              className="text-green-500 hover:text-green-600 transition-colors"
+            >
+              分配菜单
+            </Button>
+          </Tooltip>
+
           <Popconfirm
-            title="确定删除此数据吗?"
+            title="删除确认"
+            description="你确定要删除这个角色吗？此操作不可恢复。"
             onConfirm={() => handleDelete(record.id)}
             okText="确定"
             cancelText="取消"
+            okButtonProps={{
+              danger: true,
+              className: 'hover:bg-red-600'
+            }}
           >
-            <Button type="link" icon={<DeleteOutlined />} danger>删除</Button>
+            <Tooltip title="删除角色">
+              <Button
+                type="link"
+                icon={<DeleteOutlined />}
+                danger
+                className="hover:text-red-600 transition-colors"
+              >
+                删除
+              </Button>
+            </Tooltip>
           </Popconfirm>
-        </>
+        </Space>
       ),
     },
   ];
 
   return (
     <div className='p-4'>
-      <Button type="primary" onClick={handleAdd}>添加角色</Button>
+      <Space size={16}>
+        <Input
+          placeholder="搜索角色名称"
+          prefix={<SearchOutlined />}
+          value={searchName}
+          onChange={(e) => setSearchName(e.target.value)}
+        />
+        <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+          搜索
+        </Button>
+        <Button icon={<ReloadOutlined />} onClick={handleRefresh}>刷新</Button>
+        <Button type="primary" onClick={handleAdd}>添加角色</Button>
+      </Space>
       <Table
         columns={columns}
         dataSource={roles}
         style={{ marginTop: 20 }}
         loading={loading}
+        bordered
         rowKey={(record) => record.id.toString()} // 使用 id 作为唯一键
         pagination={false} // 使用自定义的 Pagination
+        locale={{
+          emptyText: (
+            <div className="py-8 flex flex-col items-center">
+              <Icon
+                icon="eos-icons:role-binding"
+                className="text-4xl text-gray-300 mb-2"
+              />
+              <div className="text-gray-500">暂无角色数据</div>
+            </div>
+          )
+        }}
       />
-      <Pagination
-        currentPage={currentPage}
-        pageSize={pageSize}
-        totalItems={totalItems}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-      />
-
+      {
+        totalItems > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+          />
+        )
+      }
       <Drawer
         title={editingRole ? '编辑角色' : '添加角色'}
         placement="right"
@@ -341,6 +448,7 @@ const RoleManagement: React.FC = () => {
       </Drawer>
 
       <Drawer
+        loading={fetchAssignedMenusLoading}
         title={`为 ${currentRole?.name || ''} 分配菜单`}
         placement="right"
         width={400}

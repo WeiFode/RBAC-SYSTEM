@@ -25,11 +25,11 @@ const PermissionConfigDrawer: React.FC<PermissionConfigDrawerProps> = ({ visible
     const fetchPermissions = async (menuId: number) => {
         setLoading(true);
         try {
-            const url = `/menu/permissions/get?id=${menuId}`;
+            const url = `/menus/permissions/get?id=${menuId}`;
             const response = await $clientReq.get(url);
-
+            
             if (response) {
-                const permissions = response.map((perm: any) => ({
+                const permissions = response.data.map((perm: any) => ({
                     code: perm.code,
                     description: perm.description,
                     role_ids: perm.role_ids.map((id: number) => id.toString()) // 将每个 ID 转换为字符串
@@ -47,7 +47,7 @@ const PermissionConfigDrawer: React.FC<PermissionConfigDrawerProps> = ({ visible
     const fetchRoles = async () => {
         try {
             const response = await $clientReq.get('/dicts');
-            setRolesOption(response);
+            setRolesOption(response.data.list);
         } catch (error) {
         }
     };
@@ -59,8 +59,7 @@ const PermissionConfigDrawer: React.FC<PermissionConfigDrawerProps> = ({ visible
                 role_ids: perm.role_ids.map((id: string | number) => Number(id))
             }))
         };
-        console.log('Formatted values:', formattedValues);
-        const url = `/menu/permissions/post?id=${menuId}`;
+        const url = `/menus/permissions/post?id=${menuId}`;
         const res = await $clientReq.post(url, formattedValues);
         if (res) {
             message.success('提交成功');

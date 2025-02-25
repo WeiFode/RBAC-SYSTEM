@@ -9,7 +9,6 @@ import { UserOutlined, SettingOutlined, LogoutOutlined, BellOutlined, SearchOutl
 import { useBreadcrumb } from '@/contexts/breadcrumbContext';
 import { signOut } from "next-auth/react";
 import { Icon } from '@iconify/react';
-import LOGO from '@/public/icons/logo.png'
 interface HeaderProps {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -70,14 +69,6 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen, sidebarExp
     </Menu>
   );
 
-  const languageMenu = (
-    <Menu onClick={({ key }) => setCurrentLanguage(key)}>
-      <Menu.Item key="中文">中文</Menu.Item>
-      <Menu.Item key="English">English</Menu.Item>
-      <Menu.Item key="日本語">日本語</Menu.Item>
-    </Menu>
-  );
-
   const onSearch = (value: string) => {
     console.log('搜索:', value);
     // 实现搜索逻辑
@@ -115,7 +106,7 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen, sidebarExp
             <Image
               width={32}
               height={32}
-              src={LOGO}
+              src={"http://8.134.73.175/favicon.ico"}
               alt="Logo"
             />
           </Link>
@@ -201,12 +192,6 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen, sidebarExp
               onClick={() => setIsHelpModalVisible(true)}
             />
           </Tooltip>
-
-          <Dropdown overlay={languageMenu} trigger={['click']}>
-            <Button icon={<TranslationOutlined />} type="text">
-              {currentLanguage}
-            </Button>
-          </Dropdown>
 
           <Divider type="vertical" />
 

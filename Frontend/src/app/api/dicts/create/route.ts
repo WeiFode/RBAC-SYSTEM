@@ -4,7 +4,7 @@ import { $serverReq } from '@/utils/serverRequest';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const data = await $serverReq.post('/api/dicts', body);
+    const data = await $serverReq.post('/dicts', body);
 
     return NextResponse.json(data);
   }  catch (error: any) {

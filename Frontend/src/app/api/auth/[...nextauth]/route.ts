@@ -13,7 +13,7 @@ export const authOptions: AuthOptions = {
                     return null
                 }
                 try {
-                    const response:any = await fetch(`${process.env.API_BASE_URL}/api/adminUser/login`, {
+                    const response:any = await fetch(`${process.env.API_BASE_URL}/api/v1/auth/login`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -21,20 +21,20 @@ export const authOptions: AuthOptions = {
                           password: credentials.password
                         })
                       });
-               
+
                       if (!response.ok) {
                         return null;
                       }
                
                       const data = await response.json();
                     
-                      if (data.token) {
+                      if (data?.data?.token) {
                         return {
-                          id: data.user.id.toString(),
-                          name: data.user.name,
-                          email: data.user.email,
-                          token: data.token,
-                          user: data.user
+                          id: data.data.user.id.toString(),
+                          name: data.data.user.name,
+                          email: data.data.user.email,
+                          token: data.data.token,
+                          user: data.data.user
                         }
                       }
                     return null

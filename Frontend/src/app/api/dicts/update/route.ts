@@ -5,7 +5,7 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
 
-    const data = await $serverReq.put('/api/dicts', body);
+    const data = await $serverReq.put(`/dicts/${body.id}`, body);
 
     return NextResponse.json(data);
   } catch (error: any) {
