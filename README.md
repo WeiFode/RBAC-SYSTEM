@@ -1,13 +1,14 @@
 # RBAC Admin - 基于Next.js+GoLang实现的RBAC权限管理系统
 
-## 项目大概的展示图
-![1](https://lin-688668-1317191106.cos.ap-guangzhou.myqcloud.com/github/1.png)
-![2](https://lin-688668-1317191106.cos.ap-guangzhou.myqcloud.com/github/2.png)
-![3](https://lin-688668-1317191106.cos.ap-guangzhou.myqcloud.com/github/3.png)
-![4](https://lin-688668-1317191106.cos.ap-guangzhou.myqcloud.com/github/4.png)
-![5](https://lin-688668-1317191106.cos.ap-guangzhou.myqcloud.com/github/5.png)
-![6](https://lin-688668-1317191106.cos.ap-guangzhou.myqcloud.com/github/6.png)
-![7](https://lin-688668-1317191106.cos.ap-guangzhou.myqcloud.com/github/7.png)
+## 📦 项目预览图
+
+![RBAC Admin](./src/public/1.png)
+![RBAC Admin](./src/public/2.png)
+![RBAC Admin](./src/public/3.png)
+![RBAC Admin](./src/public/4.png)
+![RBAC Admin](./src/public/5.png)
+![RBAC Admin](./src/public/6.png)
+![RBAC Admin](./src/public/7.png)
 
 ## 前端请进入Frontend
 
